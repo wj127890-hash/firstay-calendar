@@ -1,99 +1,103 @@
 "use client";
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, X } from 'lucide-react';
 
-export default function MobileCalendar() {
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 3, 1));
-  const [selectedDate, setSelectedDate] = useState<number | null>(null);
-  const [memo, setMemo] = useState('');
-  const [mounted, setMounted] = useState(false);
+// 보내주신 정확한 주소로 설정했습니다!
+const AIRBNB_ICAL_URL = "https://www.airbnb.co.kr/calendar/ical/1449092803394676993.ics?t=ae54c99940fb41e998f0b0b30f34e0ea";
 
-  // 임시 예약 데이터 (나중에 DB 연결하면 자동으로 불러올 거예요)
-  const reservations = [9, 10, 12, 19, 24, 26, 28, 30];
+export default function Calendar() {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [checkoutDates, setCheckoutDates] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const firstDay = new Date(year, month, 1).getDay();
-
-  useEffect(() => { setMounted(true); }, []);
-
-  const handleSaveMemo = () => {
-    if (selectedDate) {
-      localStorage.setItem(`memo-${year}-${month + 1}-${selectedDate}`, memo);
-      setSelectedDate(null);
+  useEffect(() => {
+    async function fetchCalendar() {
+      try {
+        const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(AIRBNB_ICAL_URL)}`);
+        const data = await response.json();
+        const icsText = data.contents;
+        
+        const dates: string[] = [];
+        const lines = icsText.split(/\r?\n/);
+        
+        lines.forEach((line: string) => {
+          if (line.includes('DTEND')) {
+            const match = line.match(/\d{8}/);
+            if (match) {
+              const s = match[0];
+              // 월과 일을 항상 2자리 숫자(04, 09 등)로 유지해서 저장합니다.
+              const formattedDate = `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+              dates.push(formattedDate);
+            }
+          }
+        });
+        setCheckoutDates(dates);
+      } catch (e) {
+        console.error("연동 실패:", e);
+      }
     }
+    fetchCalendar();
+  }, []);
+
+  const daysInMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+  const firstDayOfMonth = (date: Date) => new Date(date.getFullYear(), date.getMonth(), 1).getDay();
+  const prevMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1));
+  const nextMonth = () => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1));
+
+  const isCheckoutDay = (day: number) => {
+    const year = currentMonth.getFullYear();
+    const month = String(currentMonth.getMonth() + 1).padStart(2, '0');
+    const date = String(day).padStart(2, '0');
+    const target = `${year}-${month}-${date}`; // '2026-04-10' 형식으로 비교
+    return checkoutDates.includes(target);
   };
 
-  if (!mounted) return null;
-
   return (
-    <div className="flex flex-col h-screen bg-gray-50 font-sans max-w-md mx-auto border-x border-gray-200 shadow-lg">
-      {/* 상단바: 모바일 앱 느낌 */}
-      <header className="bg-orange-500 pt-10 pb-6 px-6 text-white rounded-b-[40px] shadow-md">
+    <div className="max-w-md mx-auto min-h-screen bg-gray-50 pb-10">
+      <div className="bg-orange-600 text-white p-8 rounded-b-[40px] shadow-lg text-center">
         <div className="flex justify-between items-center mb-2">
-          <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="text-2xl font-bold p-2">〈</button>
-          <h1 className="text-2xl font-black">{year}년 {month + 1}월</h1>
-          <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="text-2xl font-bold p-2">〉</button>
+          <button onClick={prevMonth}><ChevronLeft size={30} /></button>
+          <h2 className="text-3xl font-bold">{currentMonth.getFullYear()}년 {currentMonth.getMonth() + 1}월</h2>
+          <button onClick={nextMonth}><ChevronRight size={30} /></button>
         </div>
-        <p className="text-center text-[10px] tracking-widest opacity-80 font-bold">FIRSTAY 1000 MOBILE</p>
-      </header>
-
-      {/* 요일 표시 */}
-      <div className="grid grid-cols-7 gap-0 px-4 mt-6 text-center text-[11px] font-bold text-gray-400">
-        {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
-          <div key={d} className={i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : ''}>{d}</div>
-        ))}
+        <p className="text-orange-200 tracking-widest text-xs font-bold uppercase font-sans">Firstay 1000 Mobile</p>
       </div>
 
-      {/* 달력 본문: 터치하기 좋게 큼직하게 */}
-      <div className="grid grid-cols-7 gap-2 p-4 flex-1 overflow-y-auto content-start">
-        {Array.from({ length: firstDay }).map((_, i) => <div key={`e-${i}`} />)}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const date = i + 1;
-          const isReserved = reservations.includes(date);
-          const hasMemo = localStorage.getItem(`memo-${year}-${month + 1}-${date}`);
-
-          return (
-            <button
-              key={date}
-              onClick={() => {
-                setSelectedDate(date);
-                setMemo(localStorage.getItem(`memo-${year}-${month + 1}-${date}`) || '');
-              }}
-              className={`aspect-square rounded-2xl flex flex-col items-center justify-center relative border-2 transition-all active:scale-95 ${
-                isReserved ? 'bg-orange-500 border-orange-500 text-white shadow-orange-200 shadow-lg' : 'bg-white border-transparent text-gray-700'
-              }`}
-            >
-              <span className={`text-base font-black ${isReserved ? 'text-white' : 'text-gray-800'}`}>{date}</span>
-              {isReserved && <span className="text-[8px] font-bold mt-0.5 opacity-90 text-white">CHECKOUT</span>}
-              {hasMemo && <div className="absolute top-1 right-1 w-2 h-2 bg-yellow-300 rounded-full border border-orange-600"></div>}
-            </button>
-          );
-        })}
+      <div className="p-6">
+        <div className="grid grid-cols-7 mb-4 text-center text-xs font-bold text-gray-400">
+          {['일', '월', '화', '수', '목', '금', '토'].map((d, i) => (
+            <div key={d} className={i === 0 ? 'text-red-400' : i === 6 ? 'text-blue-400' : ''}>{d}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7 gap-3">
+          {Array(firstDayOfMonth(currentMonth)).fill(null).map((_, i) => <div key={`e-${i}`} />)}
+          {Array.from({ length: daysInMonth(currentMonth) }, (_, i) => i + 1).map(day => {
+            const checkout = isCheckoutDay(day);
+            return (
+              <div 
+                key={day} 
+                onClick={() => checkout && setSelectedDate(`${currentMonth.getMonth()+1}월 ${day}일`)}
+                className={`relative h-14 flex items-center justify-center rounded-2xl shadow-sm text-lg font-bold transition-all ${checkout ? 'bg-orange-500 text-white scale-105 z-10' : 'bg-white text-gray-700'}`}
+              >
+                <div className="flex flex-col items-center">
+                  <span>{day}</span>
+                  {checkout && <span className="text-[7px] font-black leading-none mt-1">CHECKOUT</span>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
-      {/* 모바일 하단 메모 모달 (터치하면 아래에서 슥 올라옴) */}
       {selectedDate && (
-        <div className="fixed inset-0 bg-black/50 flex items-end z-50 animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-md mx-auto rounded-t-[40px] p-8 animate-in slide-in-from-bottom duration-300 shadow-2xl">
-            <div className="w-12 h-1 bg-gray-200 rounded-full mx-auto mb-6"></div>
+        <div className="fixed inset-0 bg-black/60 flex items-end z-50">
+          <div className="bg-white w-full rounded-t-[30px] p-8 pb-12 shadow-2xl">
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-extrabold text-gray-900">{month + 1}월 {selectedDate}일 메모</h2>
-              <button onClick={() => setSelectedDate(null)} className="text-gray-400 text-2xl font-bold">✕</button>
+              <h3 className="text-xl font-bold">{selectedDate} 메모</h3>
+              <button onClick={() => setSelectedDate(null)} className="text-gray-400"><X size={28}/></button>
             </div>
-            <textarea
-              autoFocus
-              value={memo}
-              onChange={(e) => setMemo(e.target.value)}
-              className="w-full h-40 p-4 bg-gray-50 rounded-3xl border-2 border-gray-100 text-lg focus:border-orange-500 outline-none transition-all text-black"
-              placeholder="이모님께 남길 지시사항..."
-            />
-            <button 
-              onClick={handleSaveMemo}
-              className="w-full bg-orange-500 text-white py-4 rounded-2xl mt-6 text-lg font-black shadow-lg shadow-orange-200 active:scale-95 transition-all"
-            >
-              저장하기
-            </button>
+            <textarea className="w-full h-40 p-4 border-2 border-orange-100 rounded-2xl outline-none focus:border-orange-500 text-lg" placeholder="혜빈님께 전달드립니다" />
+            <button className="w-full bg-orange-600 text-white font-bold py-4 rounded-2xl mt-4 text-xl shadow-lg">저장하기</button>
           </div>
         </div>
       )}
